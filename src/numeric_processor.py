@@ -16,7 +16,7 @@ class NumericProcessor:
         """初始化"""
         self.units_mapping = MEDICAL_UNITS
         self.range_pattern = '|'.join([re.escape(kw) for kw in RANGE_KEYWORDS])
-        # 【新增】预编译正则表达式（性能优化）
+        
         self.scientific_pattern = re.compile(r'(\d+\.?\d*)[eE]([+-]?\d+)')
         self.multi_value_pattern = re.compile(r'([A-Za-z一-龥]+)×?(\d+)')
     
@@ -119,7 +119,7 @@ class NumericProcessor:
                         if unit in sub_info['conversions']:
                             return f"{category}_{sub_type}"
         
-        # 【改进】尝试大小写不敏感匹配
+        
         # 比如：'w' 匹配 'W'，但要小心不要错转换物理量
         unit_lower = unit.lower()
         
@@ -405,7 +405,7 @@ class NumericProcessor:
                 if range_numeric:
                     numeric_data_to_process = range_numeric
         
-        # 【修复】改进的数字过滤逻辑
+        
         # 步骤1：识别有效的数字（基于上下文和单位）
         # 例如：供应商2中"5步可视可调"的5是噪声数字，应该被过滤
         # 原理：寻找多个供应商都提到的（通常相似的）数字范围，忽略只出现一次的异常值
@@ -449,7 +449,7 @@ class NumericProcessor:
                     numeric_data_to_process = [numeric_data_to_process[max_num_idx]]
         
         # 确定前缀（使用最常见的，或使用参数名称）
-        # 【修复】改进的前缀求取逻辑：优先使用批串前缀，欠較是才使用参数名称
+        
         prefix = ''
         # 优先优先使用后上出现最频繁的前缀（更恰当）
         if text_prefixes:
@@ -476,12 +476,12 @@ class NumericProcessor:
         
         # 尝试单位统一
         first_unit = units[0]
-        # 【修复】单位统一时不区分大小写（并且使用供应商中会较常出现的单位形式）
+        
         first_unit_lower = first_unit.lower()
         normalized_values = []
         used_unit = first_unit  # 预设使用的单位
         
-        # 【改进】首先检查所有单位是否兼容
+        
         # 规则：
         # 1. 如果单位都为空，可以融合
         # 2. 如果单位都相同（忽略大小写），可以融合
@@ -534,7 +534,7 @@ class NumericProcessor:
         # 使用记录的单位形式（来自供应商数据）
         final_unit = used_unit
         
-        # 【改进】检查是否所有值相同
+        
         # 比较时使用较大的整数位来防止浮点数值误差
         # 例如：3000W 转换为 3KW 后的 3.0 与 3 应该被认为相同
         rounded_values = [round(v, 6) for v in normalized_values]  # 大精度囎入

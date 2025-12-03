@@ -78,7 +78,7 @@ class MedicalDeviceFusion:
             fusion_types = []  # 每行的融合类型
             all_fused_results = []  # 所有融合结果的列表
             
-            # 【新增】供应商达标判定颜色
+            
             num_vendors = df.shape[1] - 1
             vendor_compliance_colors = [[] for _ in range(num_vendors)]
             
@@ -111,7 +111,7 @@ class MedicalDeviceFusion:
                 fusion_types.append(f_type)
                 all_fused_results.append(f"【{param_name}】{result}")
                 
-                # 【修改】第三步：供应商达标判定（需人工审核的不判断）
+                
                 if "需人工审核" in f_type:
                     # 需人工审核的行，不判断供应商是否达标，不添加颜色
                     for vendor_idx in range(len(preprocessed_values)):
@@ -146,13 +146,13 @@ class MedicalDeviceFusion:
             # 保存结果（空值保持原样，不做任何处理）
             df.to_excel(output_file, index=False, engine='openpyxl')
             
-            # 【新增】在第一行添加说明
+            
             self._add_header_instruction(output_file, df.shape[1])
             
             # 为"需人工审核"的融合数据行添加黄色背景
             self._apply_yellow_highlight_for_manual_review(output_file, fusion_types)
             
-            # 【新增】为供应商列添加达标颁色
+            
             self._apply_vendor_compliance_colors(output_file, vendor_compliance_colors, total_rows)
             
             # 合并"合并数据"列的所有单元格
@@ -218,7 +218,7 @@ class MedicalDeviceFusion:
         supplier_str = str(supplier_value).strip()
         fused_str = str(fused_value).strip()
         
-        # 【增强1】如果供应商数据包含融合参数，则满足
+        
         if fused_str.lower() in supplier_str.lower():
             return 'blue'
         
@@ -228,7 +228,7 @@ class MedicalDeviceFusion:
         
         # 文本类参数
         if rule_type == 'text' or '相似度' in fusion_type or '语义' in fusion_type:
-            # 【增强2】检查语义等价
+            
             if self._check_semantic_equivalent(supplier_str, fused_str):
                 return 'blue'
             
@@ -266,7 +266,7 @@ class MedicalDeviceFusion:
         supplier_val = supplier_nums[0]['value']
         tolerance = rule.get('tolerance', self.config.get('numeric_tolerance', 0.05))
         
-        # 【增强3】检查融合参数是否包含比较符号（≥1、≤15等）
+        
         comparison_match = re.search(r'[≥≤><=＞＜]+\s*(\d+\.?\d*)', fused_str)
         if comparison_match:
             operator = re.search(r'[≥≤><=＞＜]+', fused_str).group()
@@ -442,7 +442,7 @@ class MedicalDeviceFusion:
             # 总列数 = 原供应商列数 + 3个新增列
             fused_data_col_index = ws.max_column - 2  # 融合数据列
             
-            # 【修改】遍历fusion_types，为"需人工审核"的行添加黄色背景
+            
             # 由于插入了说明行，数据从第3行开始（第1行是说明，第2行是标题）
             for row_idx, fusion_type in enumerate(fusion_types, start=3):  # 从第3行开始
                 if "需人工审核" in str(fusion_type):
@@ -478,7 +478,7 @@ class MedicalDeviceFusion:
             # 供应商列从第2列开始（第1列是参数名称）
             num_vendors = len(vendor_colors)
             
-            # 【修改】由于插入了说明行，数据从第3行开始
+            
             for row_idx in range(total_rows):
                 for vendor_idx in range(num_vendors):
                     if row_idx < len(vendor_colors[vendor_idx]):
@@ -514,7 +514,7 @@ class MedicalDeviceFusion:
             # "合并数据"是最后一列
             merged_data_col_index = ws.max_column  # 最后一列
             
-            # 【修改】合并拓展范围：由于插入了说明行，从第3行到最后一行
+            
             if total_rows > 0:
                 start_row = 3  # 从数据行开始（第1行是说明，第2行是标题）
                 end_row = total_rows + 2  # 总行数 + 2(说明行+标题行)
@@ -545,7 +545,7 @@ class MedicalDeviceFusion:
             # 获取"合并数据"列的索引（最后一列）
             merged_data_col_index = ws.max_column
             
-            # 【修改】遍历所有单元格（从第2行开始，不包括说明行）
+            
             for row in ws.iter_rows(min_row=2, max_row=total_rows + 2, min_col=1, max_col=ws.max_column):
                 for cell in row:
                     # 设置自动换行

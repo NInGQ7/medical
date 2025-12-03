@@ -61,7 +61,7 @@ class FusionEngine:
             return "无有效数据", FUSION_TYPES['insufficient_data']
         elif len(valid_data) == 1:
             self.fusion_stats['single_supplier'] += 1
-            # 【新增】统一比较符号
+            
             result = self._normalize_comparison_operators(valid_data[0])
             return result, FUSION_TYPES['single_supplier']
         
@@ -70,14 +70,14 @@ class FusionEngine:
         result, fusion_type = self.try_exact_match(valid_data)
         if result:
             self.fusion_stats['exact_match'] += 1
-            # 【新增】统一比较符号
+            
             result = self._normalize_comparison_operators(result)
             return result, fusion_type
         
-        # 【新增】获取参数规则
+        
         rule = self.get_rule_for_parameter(parameter_name)
         
-        # 【新增】多值融合
+        
         if rule.get('type') == 'multi_value':
             result, fusion_type = self.try_multi_value_fusion(valid_data, parameter_name, rule)
             if result:
@@ -85,23 +85,23 @@ class FusionEngine:
                 return result, fusion_type
         
         # ... existing code ...
-        # 【修复】数字融合会导致不同参数的数字混淆（如CPU代数+硬盘容量）
+        
         # 特别是当数据包含型号信息（如i3、i5、i8等）时，不应该进行数字融合
-        # 【改进】仅当数据不包含型号关键词时，才进行数字融合
+        
         if self.config['unit_conversion']:
             all_have_numbers = all(self.numeric_processor.is_numeric(d) for d in valid_data)
             # 检查是否包含型号关键词（如i5、RTX、第12代等）
             has_model_keyword = any(self.numeric_processor.has_model_keywords(d) for d in valid_data)
-            # 【新增】检查是否是尺寸规格类参数（如280mm×240mm等）
+            
             is_dimension = any(self.numeric_processor.is_dimension_specification(d) for d in valid_data)
-            # 【新增】检查是否是误差范围/容差（如±5%等）
+            
             is_tolerance = any(self.numeric_processor.is_error_tolerance(d) for d in valid_data)
             
             if all_have_numbers and not has_model_keyword and not is_dimension and not is_tolerance:
                 # 数据都是数字，且不包含型号、不是尺寸规格，才适合数字融合
                 result, fusion_type = self.try_numeric_fusion(valid_data, parameter_name)
                 if result:
-                    # 【新增】统一比较符号
+                    
                     result = self._normalize_comparison_operators(result)
                     if '范围' in fusion_type:
                         self.fusion_stats['numeric_range'] += 1
@@ -114,7 +114,7 @@ class FusionEngine:
         result, fusion_type = self.try_similarity_fusion(valid_data, threshold=self.config['similarity_threshold'])
         if result:
             self.fusion_stats['high_similarity'] += 1
-            # 【新增】统一比较符号
+            
             result = self._normalize_comparison_operators(result)
             return result, fusion_type
         
@@ -122,7 +122,7 @@ class FusionEngine:
         result, fusion_type = self.try_similarity_fusion(valid_data, threshold=self.config['medium_similarity_threshold'])
         if result:
             self.fusion_stats['medium_similarity'] += 1
-            # 【新增】统一比较筦号
+            
             result = self._normalize_comparison_operators(result)
             return result, FUSION_TYPES['medium_similarity']
         
@@ -131,7 +131,7 @@ class FusionEngine:
             result, fusion_type = self.try_semantic_fusion(valid_data, parameter_name)
             if result:
                 self.fusion_stats['semantic_match'] += 1
-                # 【新增】统一比较符号
+                
                 result = self._normalize_comparison_operators(result)
                 return result, fusion_type
         
@@ -313,7 +313,7 @@ class FusionEngine:
         
         # 检查是否存在不同的非空单位
         if len(all_non_empty_units) > 1:
-            # 【改进】存在多个不同的非空单位，尝试判断是否可转换
+            
             # 例如：w 和 kw 可以相互转换
             first_unit = list(all_non_empty_units)[0]
             units_compatible = True
@@ -328,7 +328,7 @@ class FusionEngine:
             if not units_compatible:
                 return None, None
         
-        # 【改进】第四步：按单位分组数据（使用小写化的単位作为key）
+        
         unit_groups = {}
         for item in data_with_units:
             # 从第一个数字信息中提取单位
@@ -350,7 +350,7 @@ class FusionEngine:
             if result:
                 return result, fusion_type
         else:
-            # 【改进】单位不一致：如果所有供应商都有不同的单位，则拒绝融合
+            
             # 这样可以避免混淆 Hz 和 s（频率和时间）等不同物理量
             if len(unit_groups) == len(data_with_units):
                 # 每个供应商都是不同的单位，无法融合
