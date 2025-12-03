@@ -55,7 +55,6 @@ FUSION_TYPES = {
     'semantic_match': '语义匹配',
     'numeric_range': '数字范围融合',
     'unit_conversion': '单位转换融合',
-    'multi_value': '多值融合',
     'single_supplier': '单供应商',
     'conflict_resolved': '冲突解决',
     'manual_review': '需人工审核',

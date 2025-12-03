@@ -78,7 +78,7 @@ class MedicalDeviceFusion:
             fusion_types = []  # 每行的融合类型
             all_fused_results = []  # 所有融合结果的列表
             
-            
+            # 【新增】供应商达标判定颜色
             num_vendors = df.shape[1] - 1
             vendor_compliance_colors = [[] for _ in range(num_vendors)]
             
@@ -111,7 +111,7 @@ class MedicalDeviceFusion:
                 fusion_types.append(f_type)
                 all_fused_results.append(f"【{param_name}】{result}")
                 
-                
+                # 【修改】第三步：供应商达标判定（需人工审核的不判断）
                 if "需人工审核" in f_type:
                     # 需人工审核的行，不判断供应商是否达标，不添加颜色
                     for vendor_idx in range(len(preprocessed_values)):
@@ -146,13 +146,13 @@ class MedicalDeviceFusion:
             # 保存结果（空值保持原样，不做任何处理）
             df.to_excel(output_file, index=False, engine='openpyxl')
             
-            
+            # 【新增】在第一行添加说明
             self._add_header_instruction(output_file, df.shape[1])
             
             # 为"需人工审核"的融合数据行添加黄色背景
             self._apply_yellow_highlight_for_manual_review(output_file, fusion_types)
             
-            
+            # 【新增】为供应商列添加达标颁色
             self._apply_vendor_compliance_colors(output_file, vendor_compliance_colors, total_rows)
             
             # 合并"合并数据"列的所有单元格
@@ -197,7 +197,8 @@ class MedicalDeviceFusion:
     def _evaluate_supplier_compliance(self, supplier_value: str, fused_value: str, 
                                       parameter_name: str, fusion_type: str) -> str:
         """
-        【新增】评估供应商数据是否满足融合要求
+        【修改】评估供应商数据是否满足融合要求
+        注意：不对不满足的单元格进行红色标记，仅标记达标（蓝色）和无数据（灰色）
         
         Args:
             supplier_value: 供应商数据
@@ -206,7 +207,7 @@ class MedicalDeviceFusion:
             fusion_type: 融合类型
             
         Returns:
-            颜色: 'blue'(达标), 'red'(不达标), 'gray'(无数据), 'none'(不标记)
+            颜色: 'blue'(达标), 'gray'(无数据), 'none'(不标记)
         """
         import pandas as pd
         from config.config import PARAM_RULES
@@ -218,7 +219,7 @@ class MedicalDeviceFusion:
         supplier_str = str(supplier_value).strip()
         fused_str = str(fused_value).strip()
         
-        
+        # 【增强1】如果供应商数据包含融合参数，则满足
         if fused_str.lower() in supplier_str.lower():
             return 'blue'
         
@@ -228,15 +229,22 @@ class MedicalDeviceFusion:
         
         # 文本类参数
         if rule_type == 'text' or '相似度' in fusion_type or '语义' in fusion_type:
-            
+            # 【增强2】检查语义等价
             if self._check_semantic_equivalent(supplier_str, fused_str):
                 return 'blue'
             
             similarity = self.fusion_engine.text_processor.calculate_similarity(
                 supplier_str, fused_str, 'token_set'
             )
-            threshold = self.config.get('text_match_threshold', 0.7) * 100
-            return 'blue' if similarity >= threshold else 'red'
+            # 【增强3】相似度判断：相似度≥60%且覆盖关键内容时标记为满足（蓝色）
+            threshold = 60  # 改为 60% 相似度
+            
+            if similarity >= threshold:
+                # 【增强】检查是否覆盖关键内容（不强制要求）
+                # 简化逻辑：只要相似度≥60%就认为满足
+                return 'blue'
+            
+            return 'none'
         
         # 数字类参数
         if rule_type == 'numeric' or '范围' in fusion_type or '单位转换' in fusion_type:
@@ -250,10 +258,11 @@ class MedicalDeviceFusion:
         if supplier_str.lower() == fused_str.lower():
             return 'blue'
         
+        # 【修改】不匹配返回'none'而非'red'
         return 'none'
     
     def _evaluate_numeric_compliance(self, supplier_str: str, fused_str: str, rule: dict) -> str:
-        """数字类参数达标判定"""
+        """数字类参数达标判定，达标标蓝色、不达标不标色"""
         import re
         
         # 提取数字
@@ -266,39 +275,42 @@ class MedicalDeviceFusion:
         supplier_val = supplier_nums[0]['value']
         tolerance = rule.get('tolerance', self.config.get('numeric_tolerance', 0.05))
         
-        
+        # 【增强3】检查融合参数是否包含比较符号（≥1、≤15等）
         comparison_match = re.search(r'[≥≤><=＞＜]+\s*(\d+\.?\d*)', fused_str)
         if comparison_match:
             operator = re.search(r'[≥≤><=＞＜]+', fused_str).group()
             threshold_val = float(comparison_match.group(1))
             
             # 判断供应商数值是否满足比较条件
+            # 【修改】达标返回'blue'，不达标返回'none'
             if '≥' in operator or '>=' in operator or '＞=' in operator:
-                return 'blue' if supplier_val >= threshold_val else 'red'
+                return 'blue' if supplier_val >= threshold_val else 'none'
             elif '≤' in operator or '<=' in operator or '＜=' in operator:
-                return 'blue' if supplier_val <= threshold_val else 'red'
+                return 'blue' if supplier_val <= threshold_val else 'none'
             elif '>' in operator or '＞' in operator:
-                return 'blue' if supplier_val > threshold_val else 'red'
+                return 'blue' if supplier_val > threshold_val else 'none'
             elif '<' in operator or '＜' in operator:
-                return 'blue' if supplier_val < threshold_val else 'red'
+                return 'blue' if supplier_val < threshold_val else 'none'
             elif '=' in operator:
                 error = abs(supplier_val - threshold_val) / threshold_val if threshold_val != 0 else 0
-                return 'blue' if error <= tolerance else 'red'
+                return 'blue' if error <= tolerance else 'none'
         
         # 判断是否为范围
         if '-' in fused_str and len(fused_nums) >= 2:
             # 范围判断
             min_val = min(n['value'] for n in fused_nums)
             max_val = max(n['value'] for n in fused_nums)
-            return 'blue' if min_val <= supplier_val <= max_val else 'red'
+            # 【修改】达标返回'blue'，不达标返回'none'
+            return 'blue' if min_val <= supplier_val <= max_val else 'none'
         else:
             # 单值判断（允许误差）
             fused_val = fused_nums[0]['value']
             error = abs(supplier_val - fused_val) / fused_val if fused_val != 0 else 0
-            return 'blue' if error <= tolerance else 'red'
+            # 【修改】达标返回'blue'，不达标返回'none'
+            return 'blue' if error <= tolerance else 'none'
     
     def _evaluate_multi_value_compliance(self, supplier_str: str, fused_str: str, rule: dict) -> str:
-        """多值类参数达标判定"""
+        """多值类参数达标判定，达标标蓝色、不达标不标色"""
         separator = rule.get('separator', '×')
         supplier_dict = self.fusion_engine.numeric_processor.parse_multi_value(supplier_str, separator)
         fused_dict = self.fusion_engine.numeric_processor.parse_multi_value(fused_str, separator)
@@ -310,8 +322,10 @@ class MedicalDeviceFusion:
         for key, required_val in fused_dict.items():
             supplier_val = supplier_dict.get(key, 0)
             if supplier_val < required_val:
-                return 'red'
+                # 【修改】不达标返回'none'
+                return 'none'
         
+        # 所有维度都满足，返回'blue'
         return 'blue'
     
     def _check_semantic_equivalent(self, text1: str, text2: str) -> bool:
@@ -397,12 +411,8 @@ class MedicalDeviceFusion:
             
             # 设置说明文本
             instruction_text = (
-                "颜色说明: "
-                "蓝色=供应商数据达标、"
-                "红色=供应商数据不达标、"
-                "灰色=供应商无数据、"
-                "黄色=需人工审核。"
-                " 注意: 该表格数据仅供参考！实际还请人工判断参数是否符合标准。"
+                "颜色说明: 蓝色=供应商数据达标 | 灰色=供应商无数据 | 黄色=需人工审核。 "
+                "注意: 该表格数据仅供参考！实际还请人工判断。"
             )
             
             cell = ws.cell(row=1, column=1)
@@ -415,6 +425,9 @@ class MedicalDeviceFusion:
             
             # 设置行高
             ws.row_dimensions[1].height = 30
+            
+            # 冻结前两行（说明行和标题行）
+            ws.freeze_panes = 'A3'
             
             wb.save(output_file)
             
@@ -442,7 +455,7 @@ class MedicalDeviceFusion:
             # 总列数 = 原供应商列数 + 3个新增列
             fused_data_col_index = ws.max_column - 2  # 融合数据列
             
-            
+            # 【修改】遍历fusion_types，为"需人工审核"的行添加黄色背景
             # 由于插入了说明行，数据从第3行开始（第1行是说明，第2行是标题）
             for row_idx, fusion_type in enumerate(fusion_types, start=3):  # 从第3行开始
                 if "需人工审核" in str(fusion_type):
@@ -471,24 +484,22 @@ class MedicalDeviceFusion:
             ws = wb.active
             
             # 创建颜色填充样式
-            blue_fill = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")
-            red_fill = PatternFill(start_color="FFB6C1", end_color="FFB6C1", fill_type="solid")
-            gray_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")
+            blue_fill = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")  # 达标→蓝色
+            gray_fill = PatternFill(start_color="D3D3D3", end_color="D3D3D3", fill_type="solid")  # 无数据→灰色
             
             # 供应商列从第2列开始（第1列是参数名称）
             num_vendors = len(vendor_colors)
             
-            
+            # 【修改】由于插入了说明行，数据从第3行开始
             for row_idx in range(total_rows):
                 for vendor_idx in range(num_vendors):
                     if row_idx < len(vendor_colors[vendor_idx]):
                         color = vendor_colors[vendor_idx][row_idx]
                         cell = ws.cell(row=row_idx + 3, column=vendor_idx + 2)  # +3因为有说明行和标题行
                         
+                        # 【修改】达标→蓝色，不达标→不标色
                         if color == 'blue':
                             cell.fill = blue_fill
-                        elif color == 'red':
-                            cell.fill = red_fill
                         elif color == 'gray':
                             cell.fill = gray_fill
             
@@ -514,7 +525,7 @@ class MedicalDeviceFusion:
             # "合并数据"是最后一列
             merged_data_col_index = ws.max_column  # 最后一列
             
-            
+            # 【修改】合并拓展范围：由于插入了说明行，从第3行到最后一行
             if total_rows > 0:
                 start_row = 3  # 从数据行开始（第1行是说明，第2行是标题）
                 end_row = total_rows + 2  # 总行数 + 2(说明行+标题行)
@@ -545,7 +556,7 @@ class MedicalDeviceFusion:
             # 获取"合并数据"列的索引（最后一列）
             merged_data_col_index = ws.max_column
             
-            
+            # 【修改】遍历所有单元格（从第2行开始，不包括说明行）
             for row in ws.iter_rows(min_row=2, max_row=total_rows + 2, min_col=1, max_col=ws.max_column):
                 for cell in row:
                     # 设置自动换行
