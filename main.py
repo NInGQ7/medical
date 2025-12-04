@@ -130,7 +130,7 @@ class MedicalDeviceFusion:
                     self.log(f"处理进度: {index + 1}/{total_rows} ({progress:.1f}%)")
             
             # 添加融合结果列
-            df['融合数据'] = fused_data
+            df['参考数据'] = fused_data
             df['融合类型'] = fusion_types
             
             # 添加合并列：将所有参数融合结果合并为一个单元格
@@ -160,6 +160,9 @@ class MedicalDeviceFusion:
             
             # 设置所有单元格自动换行，合并列顶端对齐
             self._format_cells(output_file, len(df))
+            
+            # 【新增】隐藏「融合类型」列
+            self._hide_fusion_type_column(output_file, len(df))
             
             self.log(f"融合结果已保存到: {output_file}")
             
@@ -197,8 +200,11 @@ class MedicalDeviceFusion:
     def _evaluate_supplier_compliance(self, supplier_value: str, fused_value: str, 
                                       parameter_name: str, fusion_type: str) -> str:
         """
-        【修改】评估供应商数据是否满足融合要求
-        注意：不对不满足的单元格进行红色标记，仅标记达标（蓝色）和无数据（灰色）
+        【增强】评估供应商数据是否满足融合要求
+        
+        判断逻辑：文本满足 OR 数值满足 → 蓝色
+        - 文本满足：包含关系/语义等价/相似度≥60%
+        - 数值满足：范围内/误差≤20%/比较符条件
         
         Args:
             supplier_value: 供应商数据
@@ -219,48 +225,132 @@ class MedicalDeviceFusion:
         supplier_str = str(supplier_value).strip()
         fused_str = str(fused_value).strip()
         
-        # 【增强1】如果供应商数据包含融合参数，则满足
-        if fused_str.lower() in supplier_str.lower():
+        # 【新增】检测是否为数值比较类参数（包含≥≤><等符号）
+        import re
+        is_numeric_comparison = bool(re.search(r'[≥≤><]\s*\d', fused_str))
+        
+        # ========== 第一步：文本匹配检查 ==========
+        text_matched = False
+        
+        # 【修改】如果是数值比较类参数，跳过文本匹配，直接走数值比较
+        if not is_numeric_comparison:
+            # 1.1 包含关系检查
+            if fused_str.lower() in supplier_str.lower():
+                text_matched = True
+            
+            # 1.2 语义等价检查
+            if not text_matched and self._check_semantic_equivalent(supplier_str, fused_str):
+                text_matched = True
+            
+            # 1.3 相似度检查（阈值60%）
+            if not text_matched:
+                similarity = self.fusion_engine.text_processor.calculate_similarity(
+                    supplier_str, fused_str, 'token_set'
+                )
+                if similarity >= 60:
+                    text_matched = True
+            
+            # 1.4 关键词匹配检查
+            if not text_matched and self._check_keyword_match(supplier_str, fused_str, parameter_name):
+                text_matched = True
+            
+            # 如果文本匹配，直接返回蓝色
+            if text_matched:
+                return 'blue'
+        
+        # 初始化数值匹配标记
+        numeric_matched = False
+        
+        # ========== 第一点五步A：误差类参数特殊处理 ==========
+        # 只有参数名称包含"误差"时，才进行误差比较
+        # 规则：供应商误差值 ≤ 参考数据误差值时标蓝
+        # 例如：参考数据是"≤±10%"，供应商是"≤±5%"，5% ≤ 10%，应该标蓝
+        if '误差' in parameter_name and not numeric_matched:
+            import re
+            # 提取误差值的模式
+            error_pattern = r'[≤<±\+\-/]*\s*(\d+\.?\d*)\s*(%|dB|db)?'
+            
+            supplier_match = re.search(error_pattern, supplier_str)
+            fused_match = re.search(error_pattern, fused_str)
+            
+            if supplier_match and fused_match:
+                try:
+                    supplier_error = float(supplier_match.group(1))
+                    fused_error = float(fused_match.group(1))
+                    
+                    # 供应商误差值 ≤ 参考数据误差值时达标
+                    if supplier_error <= fused_error:
+                        numeric_matched = True
+                except (ValueError, TypeError):
+                    pass
+        
+        # ========== 第一点五步B：特殊形式及方法的抽象（数字+或以上/以下）==========
+        # 处理："128dB或以上" 应该被视为 "≥128dB"
+        if not numeric_matched:
+            import re
+            # 模式：数字(可选单位)或以上/以下
+            or_above_pattern = r'(\d+\.?\d*)(\s*(?:dB|db|DB|[a-zA-Z°℃μ/%]+|[一-鿿]+)?)\s*或以上'
+            or_below_pattern = r'(\d+\.?\d*)(\s*(?:dB|db|DB|[a-zA-Z°℃μ/%]+|[一-鿿]+)?)\s*或以下'
+            
+            match_above = re.search(or_above_pattern, supplier_str)
+            match_below = re.search(or_below_pattern, supplier_str)
+            
+            if match_above:
+                # "数字+或以上" 等价于 "≥数字"
+                supplier_numeric_val = float(match_above.group(1))
+                
+                # 提取融合参数的数值
+                fused_nums = self.fusion_engine.numeric_processor.extract_numeric_info(fused_str)
+                if fused_nums:
+                    fused_val = fused_nums[0]['value']
+                    # 供应商的下限值 >= 融合参数的值，即为达标
+                    # 例如：供应商是"128dB或以上"(即≥128)，融合参数是"≥115dB"
+                    # 128 >= 115，所以达标
+                    if supplier_numeric_val >= fused_val:
+                        numeric_matched = True
+            
+            elif match_below:
+                # "数字+或以下" 等价于 "≤数字"
+                supplier_numeric_val = float(match_below.group(1))
+                
+                fused_nums = self.fusion_engine.numeric_processor.extract_numeric_info(fused_str)
+                if fused_nums:
+                    fused_val = fused_nums[0]['value']
+                    # 供应商的上限值 <= 融合参数的值，即为达标
+                    if supplier_numeric_val <= fused_val:
+                        numeric_matched = True
+        
+        # ========== 第二步：数值匹配检查 ==========
+        # 2.1 解析融合参数的数值表达式
+        parsed_fused = self.fusion_engine.numeric_processor.parse_comparison_expression(fused_str)
+        supplier_nums = self.fusion_engine.numeric_processor.extract_numeric_info(supplier_str)
+        
+        if not numeric_matched and supplier_nums:
+            supplier_val = supplier_nums[0]['value']
+            
+            # 2.2 解析融合参数的数值
+            fused_nums = self.fusion_engine.numeric_processor.extract_numeric_info(fused_str)
+            
+            if fused_nums:
+                fused_val = fused_nums[0]['value']
+                
+                # 【修改】不允许向下误差，供应商值必须 >= 融合参数值
+                if supplier_val >= fused_val:
+                    numeric_matched = True
+            
+            # 2.3 额外检查：如果融合参数是范围值，检查供应商值是否在范围内
+            if not numeric_matched and parsed_fused['type'] == 'range':
+                min_val = parsed_fused.get('min')
+                max_val = parsed_fused.get('max')
+                if min_val is not None and max_val is not None:
+                    if min_val <= supplier_val <= max_val:
+                        numeric_matched = True
+        
+        # 如果数值匹配，返回蓝色
+        if numeric_matched:
             return 'blue'
         
-        # 获取参数规则
-        rule = self.fusion_engine.get_rule_for_parameter(parameter_name)
-        rule_type = rule.get('type', 'auto')
-        
-        # 文本类参数
-        if rule_type == 'text' or '相似度' in fusion_type or '语义' in fusion_type:
-            # 【增强2】检查语义等价
-            if self._check_semantic_equivalent(supplier_str, fused_str):
-                return 'blue'
-            
-            # 【优先】阈值匹配：相似度≥60%则直接标记为达标
-            similarity = self.fusion_engine.text_processor.calculate_similarity(
-                supplier_str, fused_str, 'token_set'
-            )
-            threshold = 60  # 相似度阈值60%
-            
-            if similarity >= threshold:
-                return 'blue'
-            
-            # 【补充】阈值不足时，使用关键词匹配作为补充判断
-            if self._check_keyword_match(supplier_str, fused_str, parameter_name):
-                return 'blue'
-            
-            return 'none'
-        
-        # 数字类参数
-        if rule_type == 'numeric' or '范围' in fusion_type or '单位转换' in fusion_type:
-            return self._evaluate_numeric_compliance(supplier_str, fused_str, rule)
-        
-        # 多值类参数
-        if rule_type == 'multi_value':
-            return self._evaluate_multi_value_compliance(supplier_str, fused_str, rule)
-        
-        # 默认：精确匹配
-        if supplier_str.lower() == fused_str.lower():
-            return 'blue'
-        
-        # 【修改】不匹配返回'none'而非'red'
+        # 都不满足，不标记
         return 'none'
     
     def _evaluate_numeric_compliance(self, supplier_str: str, fused_str: str, rule: dict) -> str:
@@ -442,7 +532,7 @@ class MedicalDeviceFusion:
             
             # 设置说明文本
             instruction_text = (
-                "颜色说明: 蓝色=供应商数据达标 | 灰色=供应商无数据 | 黄色=需人工审核。 "
+                "颜色说明: 蓝色=供应商数据较接近参考数据 | 灰色=供应商无数据 | 黄色=需人工审核。 "
                 "注意: 该表格数据仅供参考！实际还请人工判断。"
             )
             
@@ -454,8 +544,18 @@ class MedicalDeviceFusion:
             cell.fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
             cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
             
-            # 设置行高
-            ws.row_dimensions[1].height = 30
+            # 【修改】自动计算最合适的行高
+            # 根据文本长度、合并单元格宽度和字体大小计算
+            text_length = len(instruction_text)
+            # 每列默认宽度8.43字符，估算合并后的总宽度
+            merged_width_chars = total_columns * 8  # 估算合并后可容纳的字符数
+            # 中文字符占用约2个字符宽度
+            effective_length = sum(2 if ord(c) > 127 else 1 for c in instruction_text)
+            # 计算需要的行数
+            lines_needed = max(1, (effective_length // merged_width_chars) + 1)
+            # 根据字体大小(14磅)和行数计算行高，每行约18磅高度
+            calculated_height = max(25, lines_needed * 20)
+            ws.row_dimensions[1].height = calculated_height
             
             # 冻结前两行（说明行和标题行）
             ws.freeze_panes = 'A3'
@@ -603,6 +703,31 @@ class MedicalDeviceFusion:
             
         except Exception as e:
             self.log(f"设置单元格格式时出错: {str(e)}")
+    
+    def _hide_fusion_type_column(self, output_file: str, total_rows: int):
+        """
+        【新增】隐藏"融合类型"列
+        
+        Args:
+            output_file: 输出Excel文件路径
+            total_rows: 数据总行数
+        """
+        try:
+            wb = load_workbook(output_file)
+            ws = wb.active
+            
+            # 找到"融合类型"列的索引
+            # "融合类型"是倒数第二列（倒数第一是"合并数据"）
+            fusion_type_col_index = ws.max_column - 1
+            
+            # 隐藏该列
+            col_letter = get_column_letter(fusion_type_col_index)
+            ws.column_dimensions[col_letter].hidden = True
+            
+            wb.save(output_file)
+            
+        except Exception as e:
+            self.log(f"隐藏融合类型列时出错: {str(e)}")
     
     def _save_log(self):
         """保存日志文件"""

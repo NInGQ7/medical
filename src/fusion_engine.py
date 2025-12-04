@@ -88,6 +88,12 @@ class FusionEngine:
             # 【新增】检查是否是误差范围/容差（如±5%等）
             is_tolerance = any(self.numeric_processor.is_error_tolerance(d) for d in valid_data)
             
+            # 【修改】只有参数名称包含"误差"时，才进行误差融合
+            if is_tolerance and '误差' in parameter_name:
+                result, fusion_type = self._try_tolerance_fusion(valid_data)
+                if result:
+                    return result, fusion_type
+            
             if all_have_numbers and not has_model_keyword and not is_dimension and not is_tolerance:
                 # 数据都是数字，且不包含型号、不是尺寸规格，才适合数字融合
                 result, fusion_type = self.try_numeric_fusion(valid_data, parameter_name)
@@ -130,6 +136,57 @@ class FusionEngine:
         result = self.handle_conflict(valid_data)
         self.fusion_stats['manual_review'] += 1
         return result, FUSION_TYPES['manual_review']
+    
+    def _try_tolerance_fusion(self, data: List[str]) -> Tuple[Optional[str], Optional[str]]:
+        """
+        误差类参数融合：取最大误差值
+        
+        例如：
+        - ±10%、±5%、±10% -> ≤±10%
+        - 误差不超过±10%、≤10% -> ≤±10%
+        
+        Args:
+            data: 供应商数据列表
+            
+        Returns:
+            (融合结果, 融合类型) 或 (None, None)
+        """
+        import re
+        
+        max_error_val = None
+        max_unit = '%'  # 默认单位
+        
+        for val in data:
+            if pd.isna(val) or str(val).strip() == '':
+                continue
+            val_str = str(val).strip()
+            
+            # 提取误差值：匹配±数字或数字%
+            # 模式1: ±数字%
+            pattern1 = r'[±\+\-/]+\s*(\d+\.?\d*)\s*(%|dB|db|\u2103|°C)?'
+            # 模式2: ≤±数字%
+            pattern2 = r'[≤<]\s*[±\+\-/]*\s*(\d+\.?\d*)\s*(%|dB|db|\u2103|°C)?'
+            # 模式3: 误差不超过数字%
+            pattern3 = r'误差[^±\d]*[±]*\s*(\d+\.?\d*)\s*(%|dB|db|\u2103|°C)?'
+            
+            for pattern in [pattern1, pattern2, pattern3]:
+                matches = re.findall(pattern, val_str, re.IGNORECASE)
+                for match in matches:
+                    try:
+                        error_val = float(match[0])
+                        unit = match[1] if len(match) > 1 and match[1] else '%'
+                        if max_error_val is None or error_val > max_error_val:
+                            max_error_val = error_val
+                            max_unit = unit
+                    except (ValueError, IndexError):
+                        continue
+        
+        if max_error_val is not None:
+            # 格式化结果：≤±最大值单位
+            result = f"≤±{max_error_val:g}{max_unit}"
+            return result, '误差融合'
+        
+        return None, None
     
     def try_exact_match(self, data: List[str]) -> Tuple[Optional[str], Optional[str]]:
         """

@@ -332,6 +332,242 @@ class NumericProcessor:
         base_value = value * conversions[unit]
         return round(base_value, 4), base_unit
     
+    def parse_comparison_expression(self, text: str) -> Dict:
+        """
+        【新增】解析比较表达式，支持多种格式
+        
+        支持的格式：
+        - 范围值："10~20", "10-20", "10至20", "约10-15"
+        - 比较符号："≥5", "≤2", ">10", "<20"
+        - 文字描述："不大于20", "不小于5", "不超过15", "至少5"
+        - 误差值："±3", "100±5", "100±5%"
+        - 波动值："约10", "大约5"
+        
+        Args:
+            text: 原始文本
+            
+        Returns:
+            {
+                'type': 'range' | 'comparison' | 'tolerance' | 'approx' | 'single',
+                'min': float | None,
+                'max': float | None,
+                'base': float | None,  # 对于误差值
+                'error': float | None,  # 对于误差值
+                'error_type': 'absolute' | 'percent' | None,
+                'operator': str | None,  # 比较符
+                'unit': str,
+                'original': str
+            }
+        """
+        result = {
+            'type': 'single',
+            'min': None,
+            'max': None,
+            'base': None,
+            'error': None,
+            'error_type': None,
+            'operator': None,
+            'unit': '',
+            'original': text
+        }
+        
+        if not text:
+            return result
+        
+        text = str(text).strip()
+        
+        # 1. 检测误差结构：±数字 或 数字±数字
+        tolerance_pattern = r'(±|\+/-|\+-|\-\+)\s*(\d+\.?\d*)\s*(%)?\s*([a-zA-Z°℃μ/]+|[一-鿿]+)?'
+        base_tolerance_pattern = r'(\d+\.?\d*)\s*(±|\+/-)\s*(\d+\.?\d*)\s*(%)?\s*([a-zA-Z°℃μ/]+|[一-鿿]+)?'
+        
+        # 检查基准值±误差格式
+        base_match = re.search(base_tolerance_pattern, text)
+        if base_match:
+            result['type'] = 'tolerance'
+            result['base'] = float(base_match.group(1))
+            result['error'] = float(base_match.group(3))
+            result['error_type'] = 'percent' if base_match.group(4) else 'absolute'
+            result['unit'] = base_match.group(5) or ''
+            return result
+        
+        # 检查纯误差格式
+        tol_match = re.search(tolerance_pattern, text)
+        if tol_match:
+            result['type'] = 'tolerance'
+            result['error'] = float(tol_match.group(2))
+            result['error_type'] = 'percent' if tol_match.group(3) else 'absolute'
+            result['unit'] = tol_match.group(4) or ''
+            return result
+        
+        # 2. 检测比较符号（文字和符号）
+        comparison_patterns = [
+            (r'[≥≧]&?=?|>=?|>=', '>='),  # 大于等于
+            (r'[≤≦]&?=?|<=?|<=', '<='),  # 小于等于
+            (r'>|＞|大于(?!等于)', '>'),  # 大于
+            (r'<|＜|小于(?!等于)', '<'),  # 小于
+        ]
+        
+        # 文字描述的比较
+        text_comparisons = [
+            (r'不大于|不超过|最多|至多', '<='),
+            (r'不小于|至少|最少|最低', '>='),
+            (r'不高于|不超|上限', '<='),
+            (r'不低于|下限', '>='),
+        ]
+        
+        for pattern, op in text_comparisons:
+            if re.search(pattern, text):
+                result['type'] = 'comparison'
+                result['operator'] = op
+                # 提取数字
+                nums = self.extract_numeric_info(text)
+                if nums:
+                    result['min' if '>=' in op else 'max'] = nums[0]['value']
+                    result['unit'] = nums[0]['unit']
+                return result
+        
+        for pattern, op in comparison_patterns:
+            match = re.search(pattern + r'\s*(\d+\.?\d*)\s*([a-zA-Z°℃μ/]+|[一-鿿]+)?', text)
+            if match:
+                result['type'] = 'comparison'
+                result['operator'] = op
+                # 【修复】安全提取数字值
+                try:
+                    if match.group(1) is not None:
+                        value = float(match.group(1))
+                    else:
+                        continue  # 没有捕获到数字，跳过此次匹配
+                except (IndexError, ValueError, TypeError):
+                    continue
+                
+                if '>=' in op or '>' in op:
+                    result['min'] = value
+                else:
+                    result['max'] = value
+                
+                # 安全提取单位
+                if match.group(2) is not None:
+                    result['unit'] = match.group(2)
+                return result
+        
+        # 3. 检测范围值
+        range_patterns = [
+            r'(\d+\.?\d*)\s*[~\-\u81f3\u2013\u2014]\s*(\d+\.?\d*)\s*([a-zA-Z°℃μ/]+|[一-鿿]+)?',
+        ]
+        
+        for pattern in range_patterns:
+            match = re.search(pattern, text)
+            if match:
+                result['type'] = 'range'
+                result['min'] = float(match.group(1))
+                result['max'] = float(match.group(2))
+                if match.lastindex >= 3 and match.group(3):
+                    result['unit'] = match.group(3)
+                # 确保min < max
+                if result['min'] > result['max']:
+                    result['min'], result['max'] = result['max'], result['min']
+                return result
+        
+        # 4. 检测约略值
+        approx_patterns = [
+            (r'约|大约|左右|大概', 'approx'),
+            (r'约为|约于', 'approx'),
+        ]
+        
+        for pattern, type_name in approx_patterns:
+            if re.search(pattern, text):
+                result['type'] = type_name
+                nums = self.extract_numeric_info(text)
+                if nums:
+                    result['base'] = nums[0]['value']
+                    result['unit'] = nums[0]['unit']
+                return result
+        
+        # 5. 单值
+        nums = self.extract_numeric_info(text)
+        if nums:
+            result['base'] = nums[0]['value']
+            result['unit'] = nums[0]['unit']
+        
+        return result
+    
+    def merge_error_values(self, values: List[str]) -> Tuple[Optional[float], str]:
+        """
+        【新增】合并误差值，取所有供应商误差中的最大值
+        
+        Args:
+            values: 供应商数据列表
+            
+        Returns:
+            (最大误差值, 单位)
+        """
+        max_error = None
+        error_unit = ''
+        
+        for val in values:
+            if not val:
+                continue
+            parsed = self.parse_comparison_expression(str(val))
+            if parsed['type'] == 'tolerance' and parsed['error'] is not None:
+                if max_error is None or parsed['error'] > max_error:
+                    max_error = parsed['error']
+                    error_unit = parsed['unit'] or ''
+        
+        return max_error, error_unit
+    
+    def check_value_in_range(self, value: float, parsed_range: Dict, tolerance: float = 0.2) -> bool:
+        """
+        【新增】检查数值是否在范围内或满足比较条件
+        
+        Args:
+            value: 要检查的数值
+            parsed_range: parse_comparison_expression的结果
+            tolerance: 允许的误差比例（默认20%）
+            
+        Returns:
+            是否满足
+        """
+        range_type = parsed_range.get('type', 'single')
+        
+        if range_type == 'range':
+            min_val = parsed_range.get('min')
+            max_val = parsed_range.get('max')
+            if min_val is not None and max_val is not None:
+                return min_val <= value <= max_val
+        
+        elif range_type == 'comparison':
+            op = parsed_range.get('operator', '')
+            threshold = parsed_range.get('min') or parsed_range.get('max')
+            if threshold is not None:
+                if '>=' in op:
+                    return value >= threshold
+                elif '>' in op:
+                    return value > threshold
+                elif '<=' in op:
+                    return value <= threshold
+                elif '<' in op:
+                    return value < threshold
+        
+        elif range_type == 'tolerance':
+            base = parsed_range.get('base')
+            error = parsed_range.get('error')
+            error_type = parsed_range.get('error_type')
+            if base is not None and error is not None:
+                if error_type == 'percent':
+                    allowed = base * error / 100
+                else:
+                    allowed = error
+                return abs(value - base) <= allowed
+        
+        elif range_type == 'single' or range_type == 'approx':
+            base = parsed_range.get('base')
+            if base is not None:
+                # 单值比较，允许误差
+                error = abs(value - base) / base if base != 0 else 0
+                return error <= tolerance
+        
+        return False
+    
     def is_range_value(self, text: str) -> bool:
         """
         判断是否为范围值

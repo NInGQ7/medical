@@ -6,10 +6,212 @@
 
 # 医疗设备技术参数同义词映射
 MEDICAL_SYNONYMS = {
-    # 分辨率相关
+    # ========== 医疗设备专业术语同义词库 ==========
+    
+    # 扫描相关术语
+    '扫描': ['扫查', '扫描成像', '扫描检查', 'scan', 'scanning', 'Scan', 'Scanning'],
+    '扫描模式': ['扫查模式', '扫描方式', '成像模式', 'scan mode'],
+    '扫描范围': ['扫查范围', '扫描视野', '扫描区域', 'scan range', 'scan field'],
+    '扫描深度': ['扫查深度', '探测深度', '穿透深度', 'scan depth', 'penetration depth'],
+    
+    # 探查/探测相关术语
+    '探查': ['探测', '检查', '检测', '扫描', 'probe', 'detect', 'examine'],
+    '探头': ['探测器', '探测头', '传感器', '探测探头', 'probe', 'sensor', 'transducer'],
+    '探头类型': ['探测器类型', '传感器类型', 'probe type', 'transducer type'],
+    '探头频率': ['探测频率', '中心频率', '工作频率', 'probe frequency', 'center frequency'],
+    
+    # 检测/测量相关术语
+    '检测': ['测量', '检查', '探测', '监测', 'detection', 'measurement', 'test'],
+    '检测范围': ['测量范围', '检测区间', '测试范围', 'detection range', 'measurement range'],
+    '检测精度': ['测量精度', '检测准确度', '测试精度', 'detection accuracy', 'measurement accuracy'],
+    '检测灵敏度': ['测量灵敏度', '检测感度', '灵敏度', 'detection sensitivity'],
+    
+    # 成像相关术语
+    '成像': ['图像', '显像', '想像', 'imaging', 'image'],
+    '成像模式': ['图像模式', '显像模式', '想像模式', 'imaging mode', 'image mode'],
+    '成像质量': ['图像质量', '显像质量', '图质', 'image quality', 'imaging quality'],
+    '成像速度': ['图像刷新率', '显像速度', '帧率', 'imaging speed', 'frame rate'],
+    '成像深度': ['扫描深度', '探测深度', '穿透深度', 'imaging depth', 'scan depth'],
+    
+    # 分辨率相关术语（增强）
+    '分辨率': ['清晰度', '像素', '图像分辨率', '显示分辨率', '解析度', 'resolution'],
+    '横向分辨率': ['水平分辨率', '横向解析度', 'lateral resolution', 'horizontal resolution'],
+    '纵向分辨率': ['垂直分辨率', '轴向分辨率', 'axial resolution', 'vertical resolution'],
+    '空间分辨率': ['空间解析度', 'spatial resolution'],
+    '时间分辨率': ['时域分辨率', '时间解析度', 'temporal resolution'],
+    '对比度分辨率': ['灰度分辨率', '对比度解析力', 'contrast resolution'],
     '最高分辨率': ['最大分辨率', '分辨率上限', '顶级分辨率', '最佳分辨率', '峰值分辨率'],
     '最大分辨率': ['最高分辨率', '分辨率上限', '顶级分辨率', '最佳分辨率'],
-    '分辨率': ['清晰度', '像素', '图像分辨率', '显示分辨率'],
+    
+    # 灵敏度相关术语（增强）
+    '灵敏度': ['敏感度', '检测灵敏度', '感应灵敏度', '响应灵敏度', 'sensitivity'],
+    '多普勒灵敏度': ['血流灵敏度', '彩色灵敏度', 'Doppler sensitivity', 'color sensitivity'],
+    '接收灵敏度': ['接收器灵敏度', 'receiver sensitivity'],
+    
+    # 超声诊断专用术语
+    'B超': ['B模式', 'B型超声', 'B-mode', 'B成像', 'B mode', 'B scan', 'Bmode'],
+    'M模式': ['M超', 'M型', 'M-mode', 'M mode', 'Mmode'],
+    '彩色多普勒': ['彩色血流', '彩色成像', 'Color Doppler', 'CFM', 'Color Flow', '彩超'],
+    '脉冲多普勒': ['频谱多普勒', 'PW', 'Pulsed Wave Doppler', 'PWD', '脉冲波多普勒'],
+    '连续多普勒': ['连续波多普勒', 'CW', 'Continuous Wave Doppler', 'CWD'],
+    '能量多普勒': ['PDI', 'Power Doppler', '能量图'],
+    '组织谐波': ['谐波成像', 'THI', 'Tissue Harmonic Imaging', '谐波'],
+    '弹性成像': ['弹性超声', 'Elastography', '硬度成像'],
+    '造影剂增强': ['对比增强', 'CEUS', 'Contrast Enhanced'],
+    
+    # CT/MRI专用术语
+    '层厚': ['扫描层厚', '切片厚度', 'slice thickness'],
+    '转速': ['旋转速度', '机架转速', 'rotation speed', 'gantry speed'],
+    '孔径': ['机架孔径', '扫描孔径', 'bore size', 'gantry aperture'],
+    '磁场强度': ['场强', '磁场', 'field strength', 'magnetic field'],
+    '序列': ['扫描序列', '成像序列', 'sequence', 'scan sequence'],
+    
+    # 内窏镜专用术语
+    '视野角': ['视场角', '观察角度', 'field of view', 'FOV', '视角'],
+    '工作长度': ['插入部长度', '有效长度', 'working length', 'insertion length'],
+    '先端直径': ['先端外径', '插入管径', 'tip diameter', 'outer diameter'],
+    '弯曲角度': ['曲率', '先端角度', 'angulation', 'bending angle'],
+    '照明方式': ['光源', '照明类型', 'illumination', 'light source'],
+    '通道数': ['工作通道', '器械通道', 'working channels'],
+    
+    # X光机专用术语
+    '管电压': ['kVp', 'kV', '电压', 'tube voltage'],
+    '管电流': ['mA', '电流', 'tube current'],
+    '曝光时间': ['照射时间', '曝光量', 'exposure time'],
+    '焦点尺寸': ['焦点大小', '焦斑', 'focal spot size'],
+    '影像增强器': ['增强器', 'image intensifier', 'II'],
+    '平板探测器': ['平板', '平板检测器', 'flat panel detector', 'FPD'],
+    
+    # 监护仪专用术语
+    '心电导联': ['导联数', 'ECG leads', '心电导联数'],
+    '血氧测量': ['血氧监测', 'SpO2', '血氧饱和度'],
+    '无创血压': ['NIBP', '袖带血压', '无创测量'],
+    '有创血压': ['IBP', '有创测量', '动脉压'],
+    '呼吸末二氧化碳': ['ETCO2', '呼末二氧化碳'],
+    '体温测量': ['测温', '体温监测'],
+    
+    # 通用性能参数术语
+    '动态范围': ['测量范围', '工作范围', 'dynamic range'],
+    '信噪比': ['SNR', '信号噪声比', 'signal-to-noise ratio'],
+    '均匀性': ['均匀度', 'uniformity', '图像均匀性'],
+    '线性度': ['线性', 'linearity', '测量线性度'],
+    '重复性': ['重复精度', 'repeatability', '测量重复性'],
+    '稳定性': ['稳定度', 'stability', '工作稳定性'],
+    '准确性': ['准确度', '精确性', 'accuracy'],
+    
+    # 增益调节相关
+    '增益': ['gain', '增益调节', '放大倍数', '增益控制'],
+    '增益调节': ['增益', 'gain control', 'gain adjustment', '增益设置'],
+    'TGC': ['时间增益补偿', '深度增益补偿', 'time gain compensation', 'depth gain compensation', 'DGC'],
+    'STC': ['灵敏度时间控制', 'sensitivity time control'],
+    
+    # 显示相关术语（增强）
+    '显示器': ['显示屏', '屏幕', '监视器', 'LCD', 'LED屏', 'display', 'monitor'],
+    '触摸屏': ['触控屏', '触摸显示屏', 'touch screen', 'touchscreen'],
+    '调节方式': ['控制方式', '操作方式', 'control method'],
+    
+    # ========== 比较符号与文字的等价映射 ==========
+    # 用于文本匹配时识别符号与中文描述的等价关系
+    '≥': ['以上', '大于等于', '不低于', '不少于', '至少', '最低', '>=', 'gte'],
+    '以上': ['≥', '大于等于', '不低于', '至少', '>='],
+    '≤': ['以下', '小于等于', '不高于', '不超过', '不大于', '最多', '<=', 'lte'],
+    '以下': ['≤', '小于等于', '不超过', '最多', '<='],
+    '>': ['大于', '超过', '高于', '>', 'gt'],
+    '<': ['小于', '低于', '低于', '<', 'lt'],
+    '=': ['等于', '等于', '=', 'eq'],
+    '±': ['正负', '误差', '偏差', '公差', '容差', '上下浮动', '上下范围'],
+    '~': ['约', '大约', '左右', '约等于', '近似'],
+    
+    # ========== 不同厂家常用术语映射 ==========
+    
+    # GE (General Electric) 术语
+    'GE': ['General Electric', '通用电气', '通用医疗'],
+    'Logiq': ['LOGIQ', '逗斌', '德赛斯'],  # GE超声系列
+    'Vivid': ['VIVID', '维维德'],  # GE心脏超声
+    'Voluson': ['VOLUSON', '沃卢森'],  # GE妇产超声
+    'Venue': ['VENUE'],  # GE便携式超声
+    'Revolution': ['REVOLUTION'],  # GE CT
+    'Signa': ['SIGNA'],  # GE MRI
+    
+    # Philips 飞利浦术语
+    'Philips': ['飞利浦', 'PHILIPS'],
+    'Affiniti': ['AFFINITI'],  # 飞利浦超声
+    'EPIQ': ['Epiq', '爱派克'],  # 飞利浦高端超声
+    'CX50': ['cx50'],  # 飞利浦便携式
+    'Lumify': ['LUMIFY'],  # 飞利浦掌上超声
+    'Ingenia': ['INGENIA'],  # 飞利浦MRI
+    'Brilliance': ['BRILLIANCE'],  # 飞利浦CT
+    'iU22': ['IU22', 'iu22'],
+    
+    # Siemens 西门子术语
+    'Siemens': ['西门子', 'SIEMENS'],
+    'Acuson': ['ACUSON', '阿库松'],  # 西门子超声品牌
+    'Sequoia': ['SEQUOIA', '红杉'],  # 西门子超声系列
+    'Juniper': ['JUNIPER'],  # 西门子超声
+    'S2000': ['s2000'],
+    'X300': ['x300', 'X300PE'],
+    'MAGNETOM': ['Magnetom'],  # 西门子MRI
+    'SOMATOM': ['Somatom'],  # 西门子CT
+    'Artis': ['ARTIS'],  # 西门子DSA
+    
+    # Mindray 迈瑞术语
+    'Mindray': ['迈瑞', 'MINDRAY'],
+    'Resona': ['RESONA', '昔磁'],  # 迈瑞高端超声
+    'DC': ['dc'],  # 迈瑞超声系列 DC-80, DC-70
+    'Z6': ['z6'],  # 迈瑞彩超
+    'M9': ['m9'],  # 迈瑞便携式
+    'TE7': ['te7', 'TE-7'],
+    'Zonare': ['ZONARE'],
+    'BeneHeart': ['BENEHEART', '心电监护'],  # 迈瑞监护
+    'BeneView': ['BENEVIEW', '监护仪'],
+    
+    # Canon/Toshiba 佳能/东芝术语
+    'Canon': ['佳能', 'CANON'],
+    'Toshiba': ['东芝', 'TOSHIBA'],
+    'Aplio': ['APLIO'],  # 佳能超声
+    'Xario': ['XARIO'],  # 佳能超声
+    'Viamo': ['VIAMO'],  # 佳能便携式
+    'Aquilion': ['AQUILION'],  # 佳能 CT
+    'Vantage': ['VANTAGE'],  # 佳能 MRI
+    
+    # Samsung 三星术语
+    'Samsung': ['三星', 'SAMSUNG'],
+    'RS80A': ['rs80a'],
+    'HS70A': ['hs70a'],
+    'HM70A': ['hm70a'],
+    'UGEO': ['Ugeo'],
+    
+    # Hitachi 日立术语
+    'Hitachi': ['日立', 'HITACHI'],
+    'ARIETTA': ['Arietta'],
+    'ALOKA': ['Aloka', '阿洛卡'],
+    'Noblus': ['NOBLUS'],
+    
+    # Esaote 百胜术语
+    'Esaote': ['百胜', 'ESAOTE'],
+    'MyLab': ['MYLAB', 'Mylab'],
+    
+    # Olympus 奥林巴斯术语
+    'Olympus': ['奥林巴斯', 'OLYMPUS'],
+    'EVIS': ['Evis'],  # 奥林巴斯内窏镜系列
+    
+    # Fujifilm 富士术语
+    'Fujifilm': ['富士', 'FUJIFILM', '富士胶片'],
+    'Arietta': ['ARIETTA'],
+    
+    # 其他厂家
+    'Hologic': ['豪洛杰克', 'HOLOGIC'],
+    'Carestream': ['锐珂', 'CARESTREAM'],
+    'Shimadzu': ['岛津', 'SHIMADZU'],
+    'Planmeca': ['普兰梅卡', 'PLANMECA'],
+    'Medtronic': ['美敦力', 'MEDTRONIC'],
+    'Abbott': ['雅培', 'ABBOTT'],
+    'Boston Scientific': ['波士顿科学', '波科'],
+    'Stryker': ['史赛克', 'STRYKER'],
+    'Zimmer': ['捷迈', 'ZIMMER'],
+    'Smith & Nephew': ['史密斯', '史密斯威'],
+    
+    # ========== 原有分辨率相关 ==========
     
     # 【新增】维度相关语义等价
     '二维': ['2D', '2d', 'two-dimensional', '二维空间', '二维成像', '二维图像'],
