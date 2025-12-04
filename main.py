@@ -233,15 +233,17 @@ class MedicalDeviceFusion:
             if self._check_semantic_equivalent(supplier_str, fused_str):
                 return 'blue'
             
+            # 【优先】阈值匹配：相似度≥60%则直接标记为达标
             similarity = self.fusion_engine.text_processor.calculate_similarity(
                 supplier_str, fused_str, 'token_set'
             )
-            # 【增强3】相似度判断：相似度≥60%且覆盖关键内容时标记为满足（蓝色）
-            threshold = 60  # 改为 60% 相似度
+            threshold = 60  # 相似度阈值60%
             
             if similarity >= threshold:
-                # 【增强】检查是否覆盖关键内容（不强制要求）
-                # 简化逻辑：只要相似度≥60%就认为满足
+                return 'blue'
+            
+            # 【补充】阈值不足时，使用关键词匹配作为补充判断
+            if self._check_keyword_match(supplier_str, fused_str, parameter_name):
                 return 'blue'
             
             return 'none'
@@ -386,6 +388,35 @@ class MedicalDeviceFusion:
                     if (equiv.lower() in text1_lower and key.lower() in text2_lower) or \
                        (equiv.lower() in text2_lower and key.lower() in text1_lower):
                         return True
+        
+        return False
+    
+    def _check_keyword_match(self, supplier_str: str, fused_str: str, parameter_name: str) -> bool:
+        """
+        【新增】检查供应商数据是否匹配融合参数的关键词
+        
+        Args:
+            supplier_str: 供应商数据
+            fused_str: 融合参数
+            parameter_name: 参数名称
+            
+        Returns:
+            是否匹配关键词
+        """
+        # 将两个字符串转换为低小写，并去除空格
+        supplier_lower = supplier_str.lower().replace(' ', '')
+        fused_lower = fused_str.lower().replace(' ', '')
+        
+        # 提取整数字
+        supplier_words = [w for w in supplier_str.split() if w.isalnum()]
+        fused_words = [w for w in fused_str.split() if w.isalnum()]
+        
+        # 检查是否有三个不同的字符
+        # 如果担业符数为融合含断词数的一半以上，则认为匹配
+        common_count = sum(1 for w in fused_words if w.lower() in supplier_lower)
+        
+        if len(fused_words) > 0 and common_count >= len(fused_words) * 0.5:
+            return True
         
         return False
     

@@ -672,6 +672,15 @@ class NumericProcessor:
         text_lower = str(text).lower()
         param_lower = str(parameter_name).lower()
         
+        # 【增强】严格相关性检查：使用字符串相似度来判断参数是否完全不同
+        # 例如："增益调节"和"TGC分段"不应该融合
+        from difflib import SequenceMatcher
+        similarity = SequenceMatcher(None, param_lower, text_lower).ratio()
+        
+        # 如果两个参数名称的相似度低于30%，认为是完全不同的参数
+        if similarity < 0.3:
+            return False
+        
         # 提取参数的关键词
         # 例如: "电池容量" -> ["电池", "容量"]
         param_keywords = []
@@ -694,9 +703,8 @@ class NumericProcessor:
         
         has_irrelevant = any(kw in text_lower for kw in irrelevant_keywords)
         
-        # 如果包含参数关键词，认为相关
-        # 或者不包含明显不相关的词
-        return has_param_keyword or not has_irrelevant
+        # 修改逻辑：必须包含参数关键词且不包含不相关词
+        return has_param_keyword and not has_irrelevant
     
     def is_dimension_specification(self, text: str) -> bool:
         """
