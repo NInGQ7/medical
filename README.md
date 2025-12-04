@@ -16,6 +16,8 @@
 - Python 3.7+
 - 依赖包：pandas, openpyxl, fuzzywuzzy, jieba
 
+### 以来安装
+- pip install -r requirements.txt
 
 ### 运行方式
 
