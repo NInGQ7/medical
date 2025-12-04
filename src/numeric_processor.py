@@ -658,14 +658,16 @@ class NumericProcessor:
         import pandas as pd
         from collections import Counter
         
-        # 【新增】第一步：检测是否为误差结构
+        # 【修改】第一步：检测是否为误差结构
         # 误差结构特征：含有"±"或"误差"关键词
+        # 【新增】只有参数名称包含"误差"时，才进行误差融合
         has_error_struct = False
-        for val in values:
-            val_str = str(val) if pd.notna(val) else ''
-            if '±' in val_str or '误差' in val_str:
-                has_error_struct = True
-                break
+        if '误差' in parameter_name:  # 只有参数名称包含"误差"时才检测误差结构
+            for val in values:
+                val_str = str(val) if pd.notna(val) else ''
+                if '误差' in val_str:
+                    has_error_struct = True
+                    break
         
         # 若为误差结构，提取最大数值
         if has_error_struct:
@@ -736,7 +738,6 @@ class NumericProcessor:
                 if range_numeric:
                     numeric_data_to_process = range_numeric
         
-                # ... existing code ...
         # 步骤1：识别有效的数字（基于上下文和单位）
         # 例如：供应商2中"5步可视可调"的5是噪声数字，应该被过滤
         # 原理：寻找多个供应商都提到的（通常相似的）数字范围，忽略只出现一次的异常值
@@ -753,9 +754,14 @@ class NumericProcessor:
                 sorted_vals = sorted(all_values)
                 median_val = sorted_vals[len(sorted_vals) // 2]
                 
-                # 如果最小值远小于中位数（<中位数的50%），可能是噪声
+                # 【修改】如果数值跨度非常大（max/min > 50），说明是正常的大范围数据，不进行噪声过滤
+                max_val = max(all_values)
                 min_val = min(all_values)
-                if min_val < median_val * 0.5:
+                if min_val > 0 and max_val / min_val > 50:
+                    # 数值跨度很大，不过滤
+                    pass
+                elif min_val < median_val * 0.5:
+                    # 如果最小值远小于中位数（<中位数的50%），可能是噪声
                     # 过滤掉这个最小值
                     numeric_data_to_process = [n for n in numeric_data_to_process if n['value'] >= median_val * 0.5]
         
@@ -780,7 +786,6 @@ class NumericProcessor:
                     numeric_data_to_process = [numeric_data_to_process[max_num_idx]]
         
         # 确定前缀（使用最常见的，或使用参数名称）
-                # ... existing code ...
         prefix = ''
         # 优先优先使用后上出现最频繁的前缀（更恰当）
         if text_prefixes:
@@ -792,6 +797,8 @@ class NumericProcessor:
         
         # 检查单位是否一致
         units = [n['unit'] for n in numeric_data_to_process if n['unit']]
+        # 【修改】过滤掉明显不是标准单位的字符串（长度>2的中文字符串）
+        units = [u for u in units if not (len(u) > 2 and any('\u4e00' <= c <= '\u9fff' for c in u))]
         
         if not units:
             # 纯数字,无单位
@@ -812,7 +819,6 @@ class NumericProcessor:
         normalized_values = []
         used_unit = first_unit  # 预设使用的单位
         
-                # ... existing code ...
         # 规则：
         # 1. 如果单位都为空，可以融合
         # 2. 如果单位都相同（忽略大小写），可以融合
@@ -820,6 +826,8 @@ class NumericProcessor:
         # 4. 如果存在不同的非空单位且无法转换，拒绝融合（不能混淆Hz和s、%和s等）
         all_units_compatible = True
         non_empty_units = [n['unit'] for n in numeric_data_to_process if n['unit']]
+        # 【修改】过滤掉明显不是标准单位的字符串（长度>2的中文字符串）
+        non_empty_units = [u for u in non_empty_units if not (len(u) > 2 and any('\u4e00' <= c <= '\u9fff' for c in u))]
         
         if non_empty_units:
             # 存在非空单位，检查是否都相同或可转换
@@ -837,6 +845,20 @@ class NumericProcessor:
         
         # 如果单位不兼容，拒绝融合
         if not all_units_compatible:
+            return None, None
+        
+        # 【新增】过滤掉带有无效单位的数字信息
+        def is_valid_unit(unit):
+            if not unit:
+                return True  # 空单位有效
+            # 【修改】过滤掉长度>2的中文字符串（如"档可调"、"步可视可调"等）
+            if len(unit) > 2 and any('\u4e00' <= c <= '\u9fff' for c in unit):
+                return False
+            return True
+        
+        numeric_data_to_process = [n for n in numeric_data_to_process if is_valid_unit(n['unit'])]
+        
+        if not numeric_data_to_process:
             return None, None
         
         for num_info in numeric_data_to_process:
@@ -865,7 +887,6 @@ class NumericProcessor:
         # 使用记录的单位形式（来自供应商数据）
         final_unit = used_unit
         
-                # ... existing code ...
         # 比较时使用较大的整数位来防止浮点数值误差
         # 例如：3000W 转换为 3KW 后的 3.0 与 3 应该被认为相同
         rounded_values = [round(v, 6) for v in normalized_values]  # 大精度囎入
@@ -908,39 +929,41 @@ class NumericProcessor:
         text_lower = str(text).lower()
         param_lower = str(parameter_name).lower()
         
-        # 【增强】严格相关性检查：使用字符串相似度来判断参数是否完全不同
-        # 例如："增益调节"和"TGC分段"不应该融合
-        from difflib import SequenceMatcher
-        similarity = SequenceMatcher(None, param_lower, text_lower).ratio()
-        
-        # 如果两个参数名称的相似度低于30%，认为是完全不同的参数
-        if similarity < 0.3:
-            return False
-        
-        # 提取参数的关键词
-        # 例如: "电池容量" -> ["电池", "容量"]
-        param_keywords = []
-        for word in param_lower.split():
-            if len(word) > 1:  # 过滤单个字符
-                param_keywords.append(word)
-        
-        # 检查数据中是否包含参数关键词
-        has_param_keyword = any(kw in text_lower for kw in param_keywords)
-        
-        # 检查是否包含明显不相关的关键词
-        irrelevant_keywords = [
-            '工作时间',  # 时间参数
-            '断电',      # 特殊条件
-            '操作',      # 动作词
-            '响应',      # 响应相关
-            '刷新',      # 刷新相关
-            '频率',      # 频率相关（如果参数不是频率）
+        # 【新增】检查数据是否包含其他参数名称（表明这是另一个参数的数据）
+        # 例如：参数"增益调节"，数据"TGC分段≥8" -> 不相关
+        other_param_keywords = [
+            'tgc', 'lgc', 'dgc',  # 增益类参数名
+            '分段',  # 分段类参数
+            '工作时间', '待机时间',  # 时间类参数
+            '断电', '次数',  # 特殊条件
+            '操作', '响应', '刷新',  # 动作词
         ]
         
-        has_irrelevant = any(kw in text_lower for kw in irrelevant_keywords)
+        # 检查数据是否包含其他参数关键词，且这些关键词不在参数名称中
+        for other_kw in other_param_keywords:
+            if other_kw in text_lower and other_kw not in param_lower:
+                return False
         
-        # 修改逻辑：必须包含参数关键词且不包含不相关词
-        return has_param_keyword and not has_irrelevant
+        # 中文关键词匹配：检查参数名称中的任意2个字是否在数据中出现
+        has_param_keyword = False
+        for i in range(len(param_lower) - 1):
+            bigram = param_lower[i:i+2]
+            if bigram in text_lower:
+                has_param_keyword = True
+                break
+        
+        # 如果参数名称的关键词在数据中出现，认为相关
+        if has_param_keyword:
+            return True
+        
+        # 【修改】如果数据包含数字，且不包含其他参数关键词，默认认为相关
+        # 例如："15-700Hz"、"5-600Hz范围内"、"最高值≥300Hz"等都应该被认为相关
+        import re
+        if re.search(r'\d', text_lower):
+            return True
+        
+        # 否则默认不相关
+        return False
     
     def is_dimension_specification(self, text: str) -> bool:
         """
@@ -1233,8 +1256,7 @@ class NumericProcessor:
         text_lower = str(text).lower()
         
         # 应该跳过的情况
-        skip_keywords = ['描诼', 'description', '什么是', 'what', '可能']
-        
+        skip_keywords = ['描述', 'description', '什么是', 'what', '可能']        
         return any(kw in text_lower for kw in skip_keywords)
     
     def normalize_comparison_operators(self, text: str) -> str:

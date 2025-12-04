@@ -94,7 +94,10 @@ class FusionEngine:
                 if result:
                     return result, fusion_type
             
-            if all_have_numbers and not has_model_keyword and not is_dimension and not is_tolerance:
+            # 【修改】只有参数名称包含"误差"时，is_tolerance才阻止数字范围融合
+            should_skip_tolerance = is_tolerance and '误差' in parameter_name
+            
+            if all_have_numbers and not has_model_keyword and not is_dimension and not should_skip_tolerance:
                 # 数据都是数字，且不包含型号、不是尺寸规格，才适合数字融合
                 result, fusion_type = self.try_numeric_fusion(valid_data, parameter_name)
                 if result:
@@ -356,8 +359,12 @@ class FusionEngine:
         # 3. 存在不同的非空单位且无法转换：拒绝融合（不能混淆Hz和s、%和s等）
         all_non_empty_units = set()
         for item in data_with_units:
-            units_in_item = [n['unit'].lower() for n in item['numeric_info'] if n['unit']]
-            all_non_empty_units.update(units_in_item)
+            # 【修改】只取第一个数字的单位，并过滤掉明显不是标准单位的字符串
+            if item['numeric_info']:
+                unit = item['numeric_info'][0]['unit']
+                # 过滤掉长度超过2的中文字符串（明显不是标准单位）
+                if unit and not (len(unit) > 2 and any('\u4e00' <= c <= '\u9fff' for c in unit)):
+                    all_non_empty_units.add(unit.lower())
         
         # 检查是否存在不同的非空单位
         if len(all_non_empty_units) > 1:
@@ -378,14 +385,27 @@ class FusionEngine:
         
         # 按单位分组数据
         unit_groups = {}
+        empty_unit_data = []  # 【新增】单独存储空单位的数据
         for item in data_with_units:
             # 从第一个数字信息中提取单位
             unit = item['numeric_info'][0]['unit'] if item['numeric_info'] else ''
-            # ... existing code ...
             unit_key = unit.lower()  # 小写化作为key，以处理W和kW的大小写差异
-            if unit_key not in unit_groups:
-                unit_groups[unit_key] = []
-            unit_groups[unit_key].append(item['original'])
+            
+            if unit_key == '':
+                # 【新增】空单位数据单独存储
+                empty_unit_data.append(item['original'])
+            else:
+                if unit_key not in unit_groups:
+                    unit_groups[unit_key] = []
+                unit_groups[unit_key].append(item['original'])
+        
+        # 【新增】将空单位数据合并到最大的非空单位组
+        if empty_unit_data and unit_groups:
+            largest_unit = max(unit_groups.keys(), key=lambda u: len(unit_groups[u]))
+            unit_groups[largest_unit].extend(empty_unit_data)
+        elif empty_unit_data and not unit_groups:
+            # 【新增】所有数据都没有单位，放入空单位组
+            unit_groups[''] = empty_unit_data
         
         # 第五步：融合
         if len(unit_groups) == 1:
