@@ -35,7 +35,6 @@ ENV/
 # 输出文件
 output/
 *.log
-*.txt
 
 # 操作系统
 .DS_Store
